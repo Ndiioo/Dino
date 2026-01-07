@@ -3,11 +3,10 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   Package, Search, CheckCircle2, Clock, RefreshCw, AlertCircle, LogOut, Lock, 
   UserCircle, XCircle, Eye, EyeOff, Users, Scan, Settings, Copy, Check, 
-  CloudUpload, CloudCheck, Camera, UserPlus, Edit3, QrCode, Loader2,
-  Trash2, RotateCcw, UserX, FileText, Calendar, CheckSquare, Printer, Download,
-  UserCheck, ShieldAlert, ShieldCheck, EyeClosed, UploadCloud, Info, TableProperties,
-  Database, Trash, History, TrendingUp, TrendingDown, ChevronRight, FilePlus, Megaphone,
-  Bell, BellDot, X, Monitor, Key, Shield, ShieldX, UserMinus, Wifi, WifiOff
+  Camera, UserPlus, Edit3, QrCode, Loader2,
+  Calendar, CheckSquare, Trash, TrendingUp, Megaphone,
+  X, Monitor, Key, Shield, ShieldCheck, ShieldX, UserMinus, Wifi, WifiOff, CloudCheck, EyeClosed,
+  Filter
 } from 'lucide-react';
 import { 
   Assignment, Station, GroupedAssignment, User, UserSession, 
@@ -15,7 +14,7 @@ import {
   PositionChangeRequest, AccessRequest
 } from './types';
 import { STATIONS } from './data';
-import { getLogisticsInsights } from './services/geminiService';
+import { getLogisticsInsights } from './geminiService';
 import { 
   fetchSpreadsheetData, 
   updateSpreadsheetTask, 
@@ -23,9 +22,8 @@ import {
   fetchCourierLoginData, 
   updateUserProfile,
   uploadImportedData
-} from './services/spreadsheetService';
+} from './spreadsheetService';
 import { QRCodeSVG } from 'qrcode.react';
-import Papa from 'papaparse';
 
 const SESSION_KEY = 'spx_v4_session';
 const LEAVE_KEY = 'spx_leave_requests';
@@ -96,8 +94,6 @@ const App: React.FC = () => {
   // Modals States
   const [showLeaveForm, setShowLeaveForm] = useState(false);
   const [leaveData, setLeaveData] = useState({ type: 'Tahunan' as any, duration: '', reason: '', submissionDate: new Date().toISOString().split('T')[0] });
-  const [showDeactivateModal, setShowDeactivateModal] = useState<{ userId: string, name: string } | null>(null);
-  const [deactivateReason, setDeactivateReason] = useState("");
   const [showPositionModal, setShowPositionModal] = useState<{ user: User, type: 'Promotion' | 'Demotion' } | null>(null);
   const [posNewValue, setPosNewValue] = useState("");
   const [posReason, setPosReason] = useState("");
@@ -113,7 +109,6 @@ const App: React.FC = () => {
   const [editFullName, setEditFullName] = useState("");
 
   const photoRef = useRef<HTMLInputElement>(null);
-  const importRef = useRef<HTMLInputElement>(null);
 
   // --- Roles & Permissions Logic ---
   const userRole = session?.user.role || "courier";
@@ -603,10 +598,29 @@ const App: React.FC = () => {
           </div>
         </div>
 
-        <div className="flex flex-col md:flex-row gap-2">
-          <div className="relative flex-1">
+        <div className="flex flex-col gap-3">
+          <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
             <input type="text" placeholder="Cari..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="w-full pl-9 pr-4 py-3 rounded-xl bg-white border border-gray-100 shadow-sm outline-none font-bold text-xs" />
+          </div>
+          
+          <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1">
+            <div className="shrink-0 p-2 bg-white rounded-xl border border-gray-100 shadow-sm text-[#EE4D2D]">
+              <Filter size={14} />
+            </div>
+            {['All', ...STATIONS].map((hub) => (
+              <button
+                key={hub}
+                onClick={() => setSelectedStation(hub as any)}
+                className={`px-4 py-2.5 rounded-xl font-black text-[8px] uppercase tracking-widest whitespace-nowrap transition-all border ${
+                  selectedStation === hub 
+                    ? 'bg-[#EE4D2D] text-white border-[#EE4D2D] shadow-md shadow-orange-100 active:scale-95' 
+                    : 'bg-white text-gray-400 border-gray-100 hover:border-gray-200 active:bg-gray-50'
+                }`}
+              >
+                {hub}
+              </button>
+            ))}
           </div>
         </div>
 
