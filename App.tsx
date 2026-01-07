@@ -7,7 +7,7 @@ import {
   Trash2, RotateCcw, UserX, FileText, Calendar, CheckSquare, Printer, Download,
   UserCheck, ShieldAlert, ShieldCheck, EyeClosed, UploadCloud, Info, TableProperties,
   Database, Trash, History, TrendingUp, TrendingDown, ChevronRight, FilePlus, Megaphone,
-  Bell, BellDot, X, Monitor, Key, Shield, ShieldX, UserMinus
+  Bell, BellDot, X, Monitor, Key, Shield, ShieldX, UserMinus, Wifi, WifiOff
 } from 'lucide-react';
 import { 
   Assignment, Station, GroupedAssignment, User, UserSession, 
@@ -83,6 +83,7 @@ const App: React.FC = () => {
   const [autoSaveActive, setAutoSaveActive] = useState(false);
   const [lastSyncTime, setLastSyncTime] = useState<string>(new Date().toLocaleTimeString());
   const [isPrivacyMode, setIsPrivacyMode] = useState(false);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
 
   // Requests States
   const [atActionRequests, setAtActionRequests] = useState<AssignmentActionRequest[]>([]);
@@ -145,6 +146,11 @@ const App: React.FC = () => {
     window.addEventListener('blur', () => setIsPrivacyMode(true));
     window.addEventListener('focus', () => setIsPrivacyMode(false));
 
+    // Online/Offline Listeners
+    const updateOnlineStatus = () => setIsOnline(navigator.onLine);
+    window.addEventListener('online', updateOnlineStatus);
+    window.addEventListener('offline', updateOnlineStatus);
+
     // Initial Load
     const savedLeave = localStorage.getItem(LEAVE_KEY);
     const savedDeactivate = localStorage.getItem(DEACTIVATE_KEY);
@@ -173,6 +179,8 @@ const App: React.FC = () => {
       window.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('blur', () => setIsPrivacyMode(true));
       window.removeEventListener('focus', () => setIsPrivacyMode(false));
+      window.removeEventListener('online', updateOnlineStatus);
+      window.removeEventListener('offline', updateOnlineStatus);
       clearInterval(syncTimer);
     };
   }, []);
@@ -508,6 +516,12 @@ const App: React.FC = () => {
             <div className="bg-black/90 px-2 py-1 rounded-lg border border-white/10">
               <span className="text-white font-black text-[9px] md:text-xs italic tracking-tighter uppercase">SPX Hub</span>
             </div>
+            {!isOnline && (
+              <div className="flex items-center gap-1.5 bg-black/20 px-2 py-1 rounded-lg border border-white/10 text-white animate-pulse">
+                <WifiOff size={10} />
+                <span className="text-[8px] font-black uppercase">Offline Mode</span>
+              </div>
+            )}
             {refreshing && <Loader2 size={12} className="text-white animate-spin" />}
           </div>
           <div className="flex items-center gap-1.5">
@@ -517,7 +531,7 @@ const App: React.FC = () => {
               </div>
               <span className="text-[9px] font-black text-white hidden sm:block truncate max-w-[60px]">{session.user.nickname || session.user.name.split(' ')[0]}</span>
             </button>
-            <button onClick={() => fetchData()} disabled={refreshing} className="p-1.5 bg-white/10 rounded-lg text-white"><RefreshCw size={14} className={refreshing ? 'animate-spin' : ''} /></button>
+            <button onClick={() => fetchData()} disabled={refreshing || !isOnline} className="p-1.5 bg-white/10 rounded-lg text-white disabled:opacity-50"><RefreshCw size={14} className={refreshing ? 'animate-spin' : ''} /></button>
             <button onClick={() => { localStorage.removeItem(SESSION_KEY); setSession(null); }} className="p-1.5 bg-black/30 rounded-lg text-white"><LogOut size={14} /></button>
           </div>
         </div>
@@ -595,6 +609,13 @@ const App: React.FC = () => {
             <input type="text" placeholder="Cari..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="w-full pl-9 pr-4 py-3 rounded-xl bg-white border border-gray-100 shadow-sm outline-none font-bold text-xs" />
           </div>
         </div>
+
+        {!isOnline && assignments.length > 0 && (
+          <div className="bg-amber-50 border border-amber-200 p-3 rounded-xl flex items-center gap-3">
+            <WifiOff size={18} className="text-amber-600 shrink-0" />
+            <p className="text-[10px] font-bold text-amber-800">Menampilkan data tersimpan. Verifikasi tugas offline tetap berfungsi.</p>
+          </div>
+        )}
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pb-16">
           {groupedCouriers.map(group => (
@@ -699,7 +720,7 @@ const App: React.FC = () => {
                             {isAuthorized && u.status === 'Active' && (
                               <button onClick={() => setShowPositionModal({ user: u, type: 'Promotion' })} className="py-1.5 bg-indigo-50 text-indigo-600 rounded-md font-black text-[6px] uppercase">Promosi</button>
                             )}
-                            {isAuthorized && <button onClick={() => handleDeleteMember(u.id)} className="col-span-2 py-1.5 bg-red-50 text-red-600 rounded-md font-black text-[6px] uppercase flex items-center justify-center gap-1"><UserMinus size={8} /> Hapus Member</button>}
+                            {isAuthorized && <button onClick={() => handleDeleteMember(u.id)} className="col-span-2 py-1.5 bg-red-50 text-red-600 rounded-md font-black text-[6px] uppercase flex items-center justify-center gap-1 disabled:opacity-50" disabled={!isOnline}><UserMinus size={8} /> Hapus Member</button>}
                           </div>
                         </div>
                        );
@@ -730,9 +751,9 @@ const App: React.FC = () => {
                                  </div>
                               </div>
                               <div className="flex gap-1">
-                                 <button onClick={() => handleRejectRequest('position', req.id)} className="p-1.5 bg-red-50 text-red-600 rounded-md"><X size={12} /></button>
-                                 {canApproveL1 && <button onClick={() => handleApprovePositionL1(req)} className="p-1.5 bg-indigo-600 text-white rounded-md font-black text-[7px] uppercase px-2">Approve L1</button>}
-                                 {canApproveFinal && <button onClick={() => handleApprovePositionFinal(req)} className="p-1.5 bg-black text-white rounded-md font-black text-[7px] uppercase px-2">Final Approve</button>}
+                                 <button onClick={() => handleRejectRequest('position', req.id)} className="p-1.5 bg-red-50 text-red-600 rounded-md" disabled={!isOnline}><X size={12} /></button>
+                                 {canApproveL1 && <button onClick={() => handleApprovePositionL1(req)} className="p-1.5 bg-indigo-600 text-white rounded-md font-black text-[7px] uppercase px-2 disabled:opacity-50" disabled={!isOnline}>Approve L1</button>}
+                                 {canApproveFinal && <button onClick={() => handleApprovePositionFinal(req)} className="p-1.5 bg-black text-white rounded-md font-black text-[7px] uppercase px-2 disabled:opacity-50" disabled={!isOnline}>Final Approve</button>}
                               </div>
                             </div>
                           );
@@ -758,9 +779,9 @@ const App: React.FC = () => {
                              </div>
                           </div>
                           <div className="flex gap-1 shrink-0">
-                             <button onClick={() => handleRejectRequest('leave', req.id)} className="p-1.5 bg-red-50 text-red-600 rounded-md"><X size={12} /></button>
-                             {isShiftLead && req.status === 'Pending' && <button onClick={() => handleApproveLeaveL1(req.id)} className="p-1.5 bg-indigo-600 text-white rounded-md"><Check size={12} /></button>}
-                             {isHubLeadOrPIC && <button onClick={() => handleApproveLeaveFinal(req.id)} className="p-1.5 bg-black text-white rounded-md"><Check size={12} /></button>}
+                             <button onClick={() => handleRejectRequest('leave', req.id)} className="p-1.5 bg-red-50 text-red-600 rounded-md" disabled={!isOnline}><X size={12} /></button>
+                             {isShiftLead && req.status === 'Pending' && <button onClick={() => handleApproveLeaveL1(req.id)} className="p-1.5 bg-indigo-600 text-white rounded-md disabled:opacity-50" disabled={!isOnline}><Check size={12} /></button>}
+                             {isHubLeadOrPIC && <button onClick={() => handleApproveLeaveFinal(req.id)} className="p-1.5 bg-black text-white rounded-md disabled:opacity-50" disabled={!isOnline}><Check size={12} /></button>}
                           </div>
                         </div>
                       ))}
@@ -798,7 +819,7 @@ const App: React.FC = () => {
                   <div className="p-3 border-4 border-black rounded-xl bg-white shadow-md">
                     <QRCodeSVG value={t.taskId} size={150} level="H" includeMargin={true} />
                   </div>
-                  <button onClick={() => handleCompleteTask(t.id, t.taskId, t.station)} disabled={isSaving} className="w-full bg-[#EE4D2D] text-white py-2 rounded-lg font-black text-[8px] uppercase flex items-center justify-center gap-1.5">
+                  <button onClick={() => handleCompleteTask(t.id, t.taskId, t.station)} disabled={isSaving || !isOnline} className="w-full bg-[#EE4D2D] text-white py-2 rounded-lg font-black text-[8px] uppercase flex items-center justify-center gap-1.5 disabled:opacity-50">
                     {isSaving ? <Loader2 className="animate-spin" size={10} /> : <Scan size={10} />} KONFIRMASI
                   </button>
                 </div>
@@ -824,14 +845,14 @@ const App: React.FC = () => {
              </div>
              <input type="text" value={posNewValue} onChange={(e) => setPosNewValue(e.target.value)} className="w-full p-2 rounded-lg bg-gray-50 text-[9px] font-black uppercase border border-gray-100" placeholder="Posisi Baru..." />
              <textarea value={posReason} onChange={(e) => setPosReason(e.target.value)} className="w-full p-2 rounded-lg bg-gray-50 text-[9px] h-12 resize-none font-bold" placeholder="Alasan..." />
-             <button onClick={requestPositionChange} disabled={!posNewValue || !posReason} className="w-full py-2.5 bg-black text-white rounded-lg font-black text-[8px] uppercase">KONFIRMASI</button>
+             <button onClick={requestPositionChange} disabled={!posNewValue || !posReason || !isOnline} className="w-full py-2.5 bg-black text-white rounded-lg font-black text-[8px] uppercase disabled:opacity-50">KONFIRMASI</button>
           </div>
         </div>
       )}
 
       <footer className="max-w-7xl mx-auto px-4 mt-8 pb-8 text-center opacity-30 select-none">
         <p className="text-[7px] font-black text-gray-400 uppercase tracking-widest mb-0.5">@Ndiioo Hub System</p>
-        <p className="text-[6px] font-bold text-gray-300 uppercase tracking-tighter leading-none">v5.4.0 • DUAL APPROVAL & MEMBER DELETION</p>
+        <p className="text-[6px] font-bold text-gray-300 uppercase tracking-tighter leading-none">v5.5.0 • OFFLINE SYNC ENABLED</p>
       </footer>
     </div>
   );
