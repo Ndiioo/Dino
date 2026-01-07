@@ -13,7 +13,7 @@ import {
   LeaveRequest, DeactivationRequest, ReactivationRequest, AssignmentActionRequest
 } from './types';
 import { STATIONS } from './data';
-import { getLogisticsInsights } from './services/geminiService';
+import { getLogisticsInsights } from './geminiService';
 import { 
   fetchSpreadsheetData, 
   updateSpreadsheetTask, 
@@ -21,7 +21,7 @@ import {
   fetchCourierLoginData, 
   updateUserProfile,
   uploadImportedData
-} from './services/spreadsheetService';
+} from './spreadsheetService';
 import { QRCodeSVG } from 'qrcode.react';
 import Papa from 'papaparse';
 
