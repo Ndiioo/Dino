@@ -7,44 +7,24 @@ Dashboard manajemen logistik modern untuk **Shopee Xpress (SPX)** yang dirancang
 
 ## ✨ Fitur Utama
 
-- **Live Logistics Insights**: Menggunakan **Gemini AI** untuk memberikan ringkasan operasional harian secara cerdas.
-- **Multi-Station Support**: Tab navigasi untuk memisahkan data antara Tompobulu, Biringbulu, dan Bungaya.
-- **QR Code Verification**: Setiap tugas dilengkapi dengan QR Code unik untuk kemudahan tracking.
-- **Photo Evidence**: Fitur unggah foto bukti pengiriman/tugas langsung dari dashboard.
-- **Spreadsheet Integration**: Data ditarik secara dinamis dari Google Sheets sebagai sumber data utama.
-- **High-End UI/UX**: Antarmuka bersih dengan tema warna khas SPX Express, responsif untuk mobile dan desktop.
+- **Live Logistics Insights**: Menggunakan **Gemini AI** untuk ringkasan operasional.
+- **QR Code Verification**: Verifikasi tugas berbasis QR.
+- **Secure Dashboard**: Fitur anti-screenshot dan proteksi data kurir.
+- **Spreadsheet Integration**: Sinkronisasi otomatis dengan Google Sheets.
 
-## 🚀 Teknologi
+## 🚀 Deployment ke Vercel (Rekomendasi)
 
-- **Frontend**: React 19, TypeScript, Tailwind CSS
-- **AI**: Google Gemini API (Gemini 2.5/3 Series)
-- **Icons**: Lucide React
-- **Data Parsing**: PapaParse (CSV)
-- **Deployment**: Vercel
+1. Hubungkan repository GitHub Anda ke [Vercel](https://vercel.com).
+2. Vercel akan mendeteksi **Vite** secara otomatis.
+3. **Penting**: Tambahkan Environment Variable di Vercel Dashboard:
+   - `API_KEY`: (Isi dengan API Key Gemini Anda)
+4. Klik **Deploy**.
 
 ## 🛠️ Instalasi Lokal
 
-1. Clone repository:
-   ```bash
-   git clone https://github.com/Ndiioo/SPX-Assigment-Task.git
-   ```
-2. Install dependensi:
-   ```bash
-   npm install
-   ```
-3. Set up environment variable:
-   Buat file `.env` dan tambahkan API Key Gemini Anda:
-   ```env
-   API_KEY=your_gemini_api_key_here
-   ```
-4. Jalankan aplikasi:
-   ```bash
-   npm run dev
-   ```
-
-## 📄 Lisensi
-
-Proyek ini dibuat untuk tujuan tugas internal SPX. Seluruh aset merek dagang adalah milik **Shopee Xpress**.
+1. Clone & Install: `npm install`
+2. Set `.env`: `API_KEY=your_key`
+3. Run: `npm run dev`
 
 ---
 Developed with ❤️ by Senior Frontend Team.
