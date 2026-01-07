@@ -11,6 +11,7 @@ export interface Assignment {
   lastUpdated: string;
   deletionReason?: string;
   deletedAt?: string;
+  completedAt?: string;
 }
 
 export interface AssignmentActionRequest {
@@ -59,10 +60,11 @@ export interface LeaveRequest {
   duration: string;
   reason: string;
   photoUrl?: string;
-  status: 'Pending' | 'Approved_L1' | 'Approved_L2' | 'Rejected';
+  status: 'Pending' | 'Approved_L1' | 'Approved' | 'Rejected';
   createdAt: string;
+  submissionDate: string; // Added for tracking leave date
   approvedByL1?: string;
-  approvedByL2?: string;
+  approvedByFinal?: string;
 }
 
 export interface DeactivationRequest {
