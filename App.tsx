@@ -32,6 +32,8 @@ const DEACTIVATE_KEY = 'spx_deactivate_requests';
 const REACTIVATE_KEY = 'spx_reactivate_requests';
 const AT_ACTION_KEY = 'spx_at_action_requests';
 const POSITION_REQ_KEY = 'spx_position_requests';
+const USERS_CACHE_KEY = 'spx_users_cache';
+const ASSIGNMENTS_CACHE_KEY = 'spx_assignments_cache';
 
 const extractIdAndName = (fullName: string) => {
   if (!fullName) return { id: '', name: 'N/A' };
@@ -77,6 +79,7 @@ const App: React.FC = () => {
   const [insights, setInsights] = useState("");
   const [showSettings, setShowSettings] = useState(false);
   const [settingsTab, setSettingsTab] = useState<'profile' | 'directory' | 'leave' | 'approvals' | 'history'>('profile');
+  const [autoSaveActive, setAutoSaveActive] = useState(false);
   
   // --- Security ---
   const [isPrivacyMode, setIsPrivacyMode] = useState(false);
@@ -170,17 +173,22 @@ const App: React.FC = () => {
     window.addEventListener('blur', () => setIsPrivacyMode(true));
     window.addEventListener('focus', () => setIsPrivacyMode(false));
 
+    // Initial Load from LocalStorage
     const savedLeave = localStorage.getItem(LEAVE_KEY);
     const savedDeactivate = localStorage.getItem(DEACTIVATE_KEY);
     const savedReactivate = localStorage.getItem(REACTIVATE_KEY);
     const savedAtActions = localStorage.getItem(AT_ACTION_KEY);
     const savedPosReqs = localStorage.getItem(POSITION_REQ_KEY);
+    const savedUsers = localStorage.getItem(USERS_CACHE_KEY);
+    const savedAssignments = localStorage.getItem(ASSIGNMENTS_CACHE_KEY);
     
     if (savedLeave) setLeaveRequests(JSON.parse(savedLeave));
     if (savedDeactivate) setDeactivateRequests(JSON.parse(savedDeactivate));
     if (savedReactivate) setReactivateRequests(JSON.parse(savedReactivate));
     if (savedAtActions) setAtActionRequests(JSON.parse(savedAtActions));
     if (savedPosReqs) setPositionChangeRequests(JSON.parse(savedPosReqs));
+    if (savedUsers) setAllUsers(JSON.parse(savedUsers));
+    if (savedAssignments) setAssignments(JSON.parse(savedAssignments));
 
     initializeAppData();
 
@@ -193,20 +201,41 @@ const App: React.FC = () => {
     };
   }, []);
 
+  // --- Automatic Save Mechanism ---
   useEffect(() => {
-    localStorage.setItem(LEAVE_KEY, JSON.stringify(leaveRequests));
-    localStorage.setItem(DEACTIVATE_KEY, JSON.stringify(deactivateRequests));
-    localStorage.setItem(REACTIVATE_KEY, JSON.stringify(reactivateRequests));
-    localStorage.setItem(AT_ACTION_KEY, JSON.stringify(atActionRequests));
-    localStorage.setItem(POSITION_REQ_KEY, JSON.stringify(positionChangeRequests));
-  }, [leaveRequests, deactivateRequests, reactivateRequests, atActionRequests, positionChangeRequests]);
+    const saveState = () => {
+      setAutoSaveActive(true);
+      localStorage.setItem(LEAVE_KEY, JSON.stringify(leaveRequests));
+      localStorage.setItem(DEACTIVATE_KEY, JSON.stringify(deactivateRequests));
+      localStorage.setItem(REACTIVATE_KEY, JSON.stringify(reactivateRequests));
+      localStorage.setItem(AT_ACTION_KEY, JSON.stringify(atActionRequests));
+      localStorage.setItem(POSITION_REQ_KEY, JSON.stringify(positionChangeRequests));
+      localStorage.setItem(USERS_CACHE_KEY, JSON.stringify(allUsers));
+      localStorage.setItem(ASSIGNMENTS_CACHE_KEY, JSON.stringify(assignments));
+      
+      // Temporary indicator for auto-save
+      setTimeout(() => setAutoSaveActive(false), 800);
+    };
+
+    saveState();
+  }, [
+    leaveRequests, deactivateRequests, reactivateRequests, 
+    atActionRequests, positionChangeRequests, allUsers, assignments
+  ]);
 
   const initializeAppData = async () => {
     setLoading(true);
     try {
       const [staffList, courierList] = await Promise.all([fetchStaffData(), fetchCourierLoginData()]);
       const users = [...staffList, ...courierList].map(u => ({ ...u, status: u.status || 'Active' }));
-      setAllUsers(users);
+      
+      // Merge spreadsheet data with local status updates if any
+      setAllUsers(prev => {
+        return users.map(u => {
+          const localMatch = prev.find(p => p.id === u.id);
+          return localMatch ? { ...u, ...localMatch } : u;
+        });
+      });
 
       const savedSessionStr = localStorage.getItem(SESSION_KEY);
       if (savedSessionStr) {
@@ -346,7 +375,6 @@ const App: React.FC = () => {
     }
   };
 
-  // --- AT Action Management ---
   const requestAtAction = () => {
     if (!showAtActionModal || !session || !atActionReason) return;
     const targetAssignments = assignments.filter(a => showAtActionModal.ids.includes(a.id));
@@ -384,12 +412,10 @@ const App: React.FC = () => {
     setAtActionRequests(prev => prev.map(r => r.id === req.id ? { ...r, status: 'Approved', approvedBy: session.user.name } : r));
   };
 
-  // --- Member Action Management ---
   const requestDeactivation = () => {
     if (!showDeactivateModal || !session || !deactivateReason) return;
     
     if (isHubLeadOrPIC) {
-      // Direct action for Hub Lead/PIC Hub
       setAllUsers(prev => prev.map(u => u.id === showDeactivateModal.userId ? { ...u, status: 'Inactive' } : u));
       setShowDeactivateModal(null);
       setDeactivateReason("");
@@ -448,7 +474,6 @@ const App: React.FC = () => {
     setReactivateRequests(prev => prev.map(r => r.id === req.id ? { ...r, status: 'Approved', approvedBy: session?.user.name } : r));
   };
 
-  // --- Position Change Management ---
   const requestPositionChange = () => {
     if (!showPositionModal || !posNewValue || !posReason || !session) return;
     
@@ -621,6 +646,13 @@ const App: React.FC = () => {
         </div>
       )}
 
+      {/* Auto-save Indicator */}
+      {autoSaveActive && (
+        <div className="fixed bottom-6 left-6 z-[1000] flex items-center gap-2 bg-black/80 text-white px-4 py-2 rounded-full text-[9px] font-black uppercase tracking-widest animate-fade-in shadow-2xl border border-white/10 backdrop-blur-md">
+           <CloudCheck size={14} className="text-emerald-400" /> Auto-saved
+        </div>
+      )}
+
       <header className="sticky top-0 z-50 bg-[#EE4D2D] px-3 py-3 md:px-4 md:py-4 rounded-b-[24px] md:rounded-b-[32px] shadow-lg">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="bg-black/90 px-2 py-1 md:px-3 md:py-1.5 rounded-lg md:rounded-xl border border-white/10">
@@ -735,6 +767,107 @@ const App: React.FC = () => {
           ))}
         </div>
       </main>
+
+      {/* --- Management Modals --- */}
+
+      {/* Position Change Modal */}
+      {showPositionModal && (
+        <div className="fixed inset-0 z-[400] flex items-center justify-center p-4 bg-black/95 backdrop-blur-2xl animate-fade-in">
+          <div className="bg-white rounded-[40px] w-full max-w-md p-10 shadow-2xl space-y-8">
+             <div className="flex justify-between items-center">
+                <div className="flex items-center gap-4">
+                   <div className={`p-4 rounded-2xl ${showPositionModal.type === 'Promotion' ? 'bg-indigo-50 text-indigo-600' : 'bg-amber-50 text-amber-600'}`}>
+                      {showPositionModal.type === 'Promotion' ? <TrendingUp size={32} /> : <TrendingDown size={32} />}
+                   </div>
+                   <div>
+                      <h2 className="text-xl font-black uppercase italic tracking-tighter">{showPositionModal.type === 'Promotion' ? 'Promosi' : 'Demosi'} Tim</h2>
+                      <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Network Authority Control</p>
+                   </div>
+                </div>
+                <button onClick={() => setShowPositionModal(null)} className="text-gray-300 hover:text-black transition-all"><XCircle size={32} /></button>
+             </div>
+
+             <div className="space-y-4">
+                <div className="bg-gray-50 p-6 rounded-[32px] border border-gray-100">
+                  <p className="text-[10px] font-black text-gray-400 uppercase mb-1">Target Anggota</p>
+                  <p className="font-black text-gray-900 text-lg uppercase">{showPositionModal.user.name}</p>
+                  <p className="text-[10px] font-bold text-gray-400 mt-1 uppercase italic">Posisi Saat Ini: {showPositionModal.user.position}</p>
+                </div>
+                
+                <div className="space-y-2">
+                  <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Jabatan Baru (Wajib)</p>
+                  <input 
+                    type="text"
+                    value={posNewValue}
+                    onChange={(e) => setPosNewValue(e.target.value)}
+                    className="w-full p-6 rounded-[28px] bg-gray-50 border border-gray-100 outline-none focus:border-[#EE4D2D] font-black text-sm uppercase"
+                    placeholder="Contoh: SHIFT LEAD 2"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Alasan (Wajib)</p>
+                  <textarea 
+                    value={posReason}
+                    onChange={(e) => setPosReason(e.target.value)}
+                    className="w-full p-6 rounded-[28px] bg-gray-50 border border-gray-100 outline-none focus:border-[#EE4D2D] transition-all font-bold text-sm h-32 resize-none"
+                    placeholder="Jelaskan alasan perubahan jabatan ini..."
+                  />
+                </div>
+             </div>
+
+             <button 
+               onClick={requestPositionChange}
+               disabled={!posNewValue || !posReason}
+               className={`w-full py-5 rounded-[28px] font-black text-xs uppercase tracking-[0.2em] shadow-xl transition-all ${(!posNewValue || !posReason) ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-black text-white active:scale-95'}`}
+             >
+               {isHubLeadOrPIC ? 'KONFIRMASI PERUBAHAN' : 'KIRIM PENGAJUAN'}
+             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Deactivation Modal */}
+      {showDeactivateModal && (
+        <div className="fixed inset-0 z-[400] flex items-center justify-center p-4 bg-black/95 backdrop-blur-2xl animate-fade-in">
+          <div className="bg-white rounded-[40px] w-full max-w-md p-10 shadow-2xl space-y-8">
+             <div className="flex justify-between items-center">
+                <div className="flex items-center gap-4">
+                   <div className="p-4 rounded-2xl bg-red-50 text-red-600"><UserX size={32} /></div>
+                   <div>
+                      <h2 className="text-xl font-black uppercase italic tracking-tighter">Deaktivasi Member</h2>
+                      <p className="text-[10px] font-black text-gray-400 uppercase">Security Authority System</p>
+                   </div>
+                </div>
+                <button onClick={() => setShowDeactivateModal(null)} className="text-gray-300 hover:text-black transition-all"><XCircle size={32} /></button>
+             </div>
+
+             <div className="space-y-4">
+                <div className="bg-gray-50 p-6 rounded-[32px] border border-gray-100">
+                  <p className="text-[10px] font-black text-gray-400 uppercase mb-1">Target Penonaktifan</p>
+                  <p className="font-black text-gray-900 text-lg uppercase">{showDeactivateModal.name}</p>
+                </div>
+                <div className="space-y-2">
+                  <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Alasan (Wajib)</p>
+                  <textarea 
+                    value={deactivateReason}
+                    onChange={(e) => setDeactivateReason(e.target.value)}
+                    className="w-full p-6 rounded-[28px] bg-gray-50 border border-gray-100 outline-none focus:border-red-500 transition-all font-bold text-sm h-32 resize-none"
+                    placeholder="Jelaskan alasan penonaktifan..."
+                  />
+                </div>
+             </div>
+
+             <button 
+               onClick={requestDeactivation}
+               disabled={!deactivateReason}
+               className={`w-full py-5 rounded-[28px] font-black text-xs uppercase tracking-[0.2em] shadow-xl transition-all ${!deactivateReason ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-red-600 text-white active:scale-95'}`}
+             >
+               {isHubLeadOrPIC ? 'KONFIRMASI NONAKTIF' : 'KIRIM REQUEST'}
+             </button>
+          </div>
+        </div>
+      )}
 
       {/* Verification Modal */}
       {selectedGroup && (
@@ -1005,105 +1138,6 @@ const App: React.FC = () => {
                 </div>
               )}
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* Promotion / Demotion Modal */}
-      {showPositionModal && (
-        <div className="fixed inset-0 z-[400] flex items-center justify-center p-4 bg-black/95 backdrop-blur-2xl animate-fade-in">
-          <div className="bg-white rounded-[40px] w-full max-w-md p-10 shadow-2xl space-y-8">
-             <div className="flex justify-between items-center">
-                <div className="flex items-center gap-4">
-                   <div className={`p-4 rounded-2xl ${showPositionModal.type === 'Promotion' ? 'bg-indigo-50 text-indigo-600' : 'bg-amber-50 text-amber-600'}`}>
-                      {showPositionModal.type === 'Promotion' ? <TrendingUp size={32} /> : <TrendingDown size={32} />}
-                   </div>
-                   <div>
-                      <h2 className="text-xl font-black uppercase italic tracking-tighter">{showPositionModal.type === 'Promotion' ? 'Promosi' : 'Demosi'} Tim</h2>
-                      <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Network Authority Control</p>
-                   </div>
-                </div>
-                <button onClick={() => setShowPositionModal(null)} className="text-gray-300 hover:text-black transition-all"><XCircle size={32} /></button>
-             </div>
-
-             <div className="space-y-4">
-                <div className="bg-gray-50 p-6 rounded-[32px] border border-gray-100">
-                  <p className="text-[10px] font-black text-gray-400 uppercase mb-1">Target Anggota</p>
-                  <p className="font-black text-gray-900 text-lg uppercase">{showPositionModal.user.name}</p>
-                  <p className="text-[10px] font-bold text-gray-400 mt-1 uppercase italic">Posisi Saat Ini: {showPositionModal.user.position}</p>
-                </div>
-                
-                <div className="space-y-2">
-                  <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Jabatan Baru (Wajib)</p>
-                  <input 
-                    type="text"
-                    value={posNewValue}
-                    onChange={(e) => setPosNewValue(e.target.value)}
-                    className="w-full p-6 rounded-[28px] bg-gray-50 border border-gray-100 outline-none focus:border-[#EE4D2D] font-black text-sm uppercase"
-                    placeholder="Contoh: SHIFT LEAD 2"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Alasan (Wajib)</p>
-                  <textarea 
-                    value={posReason}
-                    onChange={(e) => setPosReason(e.target.value)}
-                    className="w-full p-6 rounded-[28px] bg-gray-50 border border-gray-100 outline-none focus:border-[#EE4D2D] transition-all font-bold text-sm h-32 resize-none"
-                    placeholder="Jelaskan alasan perubahan jabatan ini..."
-                  />
-                </div>
-             </div>
-
-             <button 
-               onClick={requestPositionChange}
-               disabled={!posNewValue || !posReason}
-               className={`w-full py-5 rounded-[28px] font-black text-xs uppercase tracking-[0.2em] shadow-xl transition-all ${(!posNewValue || !posReason) ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-black text-white active:scale-95'}`}
-             >
-               {isHubLeadOrPIC ? 'KONFIRMASI PERUBAHAN' : 'KIRIM PENGAJUAN'}
-             </button>
-          </div>
-        </div>
-      )}
-
-      {/* Deactivation Modal */}
-      {showDeactivateModal && (
-        <div className="fixed inset-0 z-[400] flex items-center justify-center p-4 bg-black/95 backdrop-blur-2xl animate-fade-in">
-          <div className="bg-white rounded-[40px] w-full max-w-md p-10 shadow-2xl space-y-8">
-             <div className="flex justify-between items-center">
-                <div className="flex items-center gap-4">
-                   <div className="p-4 rounded-2xl bg-red-50 text-red-600"><UserX size={32} /></div>
-                   <div>
-                      <h2 className="text-xl font-black uppercase italic tracking-tighter">Deaktivasi Member</h2>
-                      <p className="text-[10px] font-black text-gray-400 uppercase">Security Authority System</p>
-                   </div>
-                </div>
-                <button onClick={() => setShowDeactivateModal(null)} className="text-gray-300 hover:text-black transition-all"><XCircle size={32} /></button>
-             </div>
-
-             <div className="space-y-4">
-                <div className="bg-gray-50 p-6 rounded-[32px] border border-gray-100">
-                  <p className="text-[10px] font-black text-gray-400 uppercase mb-1">Target Penonaktifan</p>
-                  <p className="font-black text-gray-900 text-lg uppercase">{showDeactivateModal.name}</p>
-                </div>
-                <div className="space-y-2">
-                  <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Alasan (Wajib)</p>
-                  <textarea 
-                    value={deactivateReason}
-                    onChange={(e) => setDeactivateReason(e.target.value)}
-                    className="w-full p-6 rounded-[28px] bg-gray-50 border border-gray-100 outline-none focus:border-red-500 transition-all font-bold text-sm h-32 resize-none"
-                    placeholder="Jelaskan alasan penonaktifan..."
-                  />
-                </div>
-             </div>
-
-             <button 
-               onClick={requestDeactivation}
-               disabled={!deactivateReason}
-               className={`w-full py-5 rounded-[28px] font-black text-xs uppercase tracking-[0.2em] shadow-xl transition-all ${!deactivateReason ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-red-600 text-white active:scale-95'}`}
-             >
-               {isHubLeadOrPIC ? 'KONFIRMASI NONAKTIF' : 'KIRIM REQUEST'}
-             </button>
           </div>
         </div>
       )}
