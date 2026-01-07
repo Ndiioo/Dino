@@ -49,7 +49,9 @@ export interface User {
   photoUrl?: string;
   dateOfBirth?: string;
   hasCompletedProfile?: boolean;
-  status?: 'Active' | 'Inactive';
+  status?: 'Active' | 'Inactive' | 'Deleted';
+  lastActive?: string;
+  accessGranted?: boolean; // Management access flag
 }
 
 export interface LeaveRequest {
@@ -62,7 +64,7 @@ export interface LeaveRequest {
   photoUrl?: string;
   status: 'Pending' | 'Approved_L1' | 'Approved' | 'Rejected';
   createdAt: string;
-  submissionDate: string; // Added for tracking leave date
+  submissionDate: string;
   approvedByL1?: string;
   approvedByFinal?: string;
 }
@@ -101,9 +103,22 @@ export interface PositionChangeRequest {
   requesterId: string;
   requesterName: string;
   reason: string;
-  status: 'Pending' | 'Approved' | 'Rejected';
-  approvedBy?: string;
+  status: 'Pending' | 'Approved_L1' | 'Approved' | 'Rejected';
+  approvedByL1?: string;
+  approvedByFinal?: string;
   createdAt: string;
+}
+
+export interface AccessRequest {
+  id: string;
+  userId: string;
+  userName: string;
+  type: 'Grant' | 'Revoke';
+  requestedRole: 'operator' | 'courier';
+  reason: string;
+  status: 'Pending' | 'Approved' | 'Rejected';
+  createdAt: string;
+  approvedBy?: string;
 }
 
 export interface UserSession {
