@@ -1,6 +1,6 @@
 
 import { GoogleGenAI, GenerateContentResponse } from "@google/genai";
-import { Assignment } from "../types";
+import { Assignment } from "./types";
 
 // Cache for insights to reduce API calls and save quota
 let cachedInsight: { text: string; timestamp: number } | null = null;

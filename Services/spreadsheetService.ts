@@ -1,6 +1,6 @@
 
 import Papa from 'papaparse';
-import { Assignment, Station, User } from '../types';
+import { Assignment, Station, User } from './types';
 
 const SHEET_ID = '1NSFmEGm3i1RgLCt1tSIaP9lYlfe8fnMMrsHeke_ZCiI';
 const APPS_SCRIPT_URL = `https://script.google.com/macros/s/AKfycbz_Placeholder/exec`;
