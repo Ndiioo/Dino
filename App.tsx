@@ -387,6 +387,16 @@ const App: React.FC = () => {
   // --- Member Action Management ---
   const requestDeactivation = () => {
     if (!showDeactivateModal || !session || !deactivateReason) return;
+    
+    if (isHubLeadOrPIC) {
+      // Direct action for Hub Lead/PIC Hub
+      setAllUsers(prev => prev.map(u => u.id === showDeactivateModal.userId ? { ...u, status: 'Inactive' } : u));
+      setShowDeactivateModal(null);
+      setDeactivateReason("");
+      alert("Member berhasil dinonaktifkan.");
+      return;
+    }
+
     const newReq: DeactivationRequest = {
       id: Math.random().toString(36).substr(2, 9),
       targetUserId: showDeactivateModal.userId,
@@ -412,6 +422,13 @@ const App: React.FC = () => {
     if (!session) return;
     const reason = prompt("Masukkan alasan re-aktivasi (Wajib):");
     if (!reason) return;
+
+    if (isHubLeadOrPIC) {
+      setAllUsers(prev => prev.map(u => u.id === userId ? { ...u, status: 'Active' } : u));
+      alert("Member berhasil diaktifkan kembali.");
+      return;
+    }
+
     const newReq: ReactivationRequest = {
       id: Math.random().toString(36).substr(2, 9),
       targetUserId: userId,
@@ -434,6 +451,16 @@ const App: React.FC = () => {
   // --- Position Change Management ---
   const requestPositionChange = () => {
     if (!showPositionModal || !posNewValue || !posReason || !session) return;
+    
+    if (isHubLeadOrPIC) {
+      setAllUsers(prev => prev.map(u => u.id === showPositionModal.user.id ? { ...u, position: posNewValue } : u));
+      setShowPositionModal(null);
+      setPosNewValue("");
+      setPosReason("");
+      alert("Posisi member berhasil diperbarui.");
+      return;
+    }
+
     const newReq: PositionChangeRequest = {
       id: Math.random().toString(36).substr(2, 9),
       targetUserId: showPositionModal.user.id,
@@ -555,7 +582,7 @@ const App: React.FC = () => {
       <div className="max-w-sm w-full bg-white rounded-[40px] shadow-2xl p-10 border border-gray-100 animate-fade-in">
         <div className="flex justify-center mb-10">
            <div className="bg-[#EE4D2D] px-6 py-3 rounded-2xl shadow-xl transform -rotate-1">
-             <span className="text-white font-black text-xl italic tracking-tighter">SPX <span className="font-light">Express</span></span>
+             <span className="text-white font-black text-xl italic tracking-tighter">Management <span className="font-light">AT kurir</span></span>
            </div>
         </div>
         <form onSubmit={handleLogin} className="space-y-4">
@@ -849,22 +876,22 @@ const App: React.FC = () => {
                                 <Edit3 size={12} /> Profil
                               </button>
                             )}
-                            {isShiftLead && user.status !== 'Inactive' && (
+                            {(isShiftLead || isHubLeadOrPIC) && user.status !== 'Inactive' && (
                               <>
                                 <button onClick={() => setShowPositionModal({ user, type: 'Promotion' })} className="py-2.5 bg-indigo-50 text-indigo-600 rounded-xl font-black text-[8px] uppercase hover:bg-indigo-100 transition-all flex items-center justify-center gap-1.5">
-                                  <TrendingUp size={12} /> Promosi
+                                  <TrendingUp size={12} /> {isHubLeadOrPIC ? 'Promosi' : 'Ajukan Promosi'}
                                 </button>
                                 <button onClick={() => setShowPositionModal({ user, type: 'Demotion' })} className="py-2.5 bg-amber-50 text-amber-600 rounded-xl font-black text-[8px] uppercase hover:bg-amber-100 transition-all flex items-center justify-center gap-1.5">
-                                  <TrendingDown size={12} /> Demosi
+                                  <TrendingDown size={12} /> {isHubLeadOrPIC ? 'Demosi' : 'Ajukan Demosi'}
                                 </button>
                                 <button onClick={() => setShowDeactivateModal({ userId: user.id, name: user.name })} className="py-2.5 bg-red-50 text-red-600 rounded-xl font-black text-[8px] uppercase hover:bg-red-100 transition-all flex items-center justify-center gap-1.5">
-                                  <UserX size={12} /> Nonaktif
+                                  <UserX size={12} /> {isHubLeadOrPIC ? 'Nonaktif' : 'Ajukan Nonaktif'}
                                 </button>
                               </>
                             )}
-                            {isShiftLead && user.status === 'Inactive' && (
+                            {(isShiftLead || isHubLeadOrPIC) && user.status === 'Inactive' && (
                               <button onClick={() => requestReactivation(user.id, user.name)} className="col-span-2 py-2.5 bg-emerald-50 text-emerald-600 rounded-xl font-black text-[8px] uppercase hover:bg-emerald-100 transition-all flex items-center justify-center gap-1.5">
-                                <RotateCcw size={12} /> Re-aktivasi
+                                <RotateCcw size={12} /> {isHubLeadOrPIC ? 'Aktifkan' : 'Ajukan Aktif'}
                               </button>
                             )}
                           </div>
@@ -1033,7 +1060,7 @@ const App: React.FC = () => {
                disabled={!posNewValue || !posReason}
                className={`w-full py-5 rounded-[28px] font-black text-xs uppercase tracking-[0.2em] shadow-xl transition-all ${(!posNewValue || !posReason) ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-black text-white active:scale-95'}`}
              >
-               KIRIM PENGAJUAN
+               {isHubLeadOrPIC ? 'KONFIRMASI PERUBAHAN' : 'KIRIM PENGAJUAN'}
              </button>
           </div>
         </div>
@@ -1075,15 +1102,15 @@ const App: React.FC = () => {
                disabled={!deactivateReason}
                className={`w-full py-5 rounded-[28px] font-black text-xs uppercase tracking-[0.2em] shadow-xl transition-all ${!deactivateReason ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-red-600 text-white active:scale-95'}`}
              >
-               KIRIM REQUEST
+               {isHubLeadOrPIC ? 'KONFIRMASI NONAKTIF' : 'KIRIM REQUEST'}
              </button>
           </div>
         </div>
       )}
 
       <footer className="max-w-7xl mx-auto px-4 mt-16 pb-16 text-center opacity-30 select-none">
-        <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.5em] mb-2">Shopee Xpress Hub Secure Management</p>
-        <p className="text-[8px] font-bold text-gray-300 uppercase tracking-widest leading-none">ENTERPRISE EDITION v4.5.0 • SECURE MODE ON</p>
+        <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.5em] mb-2">Developer @Ndiioo by Gemini AI</p>
+        <p className="text-[8px] font-bold text-gray-300 uppercase tracking-widest leading-none">ENTERPRISE EDITION v4.6.0 • SECURE MODE ON</p>
       </footer>
     </div>
   );
