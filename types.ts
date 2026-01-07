@@ -74,6 +74,7 @@ export interface DeactivationRequest {
   reason: string;
   status: 'Pending' | 'Approved' | 'Rejected';
   approvedBy?: string;
+  createdAt: string;
 }
 
 export interface ReactivationRequest {
@@ -82,8 +83,25 @@ export interface ReactivationRequest {
   targetUserName: string;
   requesterId: string;
   requesterName: string;
+  reason: string;
   status: 'Pending' | 'Approved' | 'Rejected';
   approvedBy?: string;
+  createdAt: string;
+}
+
+export interface PositionChangeRequest {
+  id: string;
+  targetUserId: string;
+  targetUserName: string;
+  oldPosition: string;
+  newPosition: string;
+  type: 'Promotion' | 'Demotion';
+  requesterId: string;
+  requesterName: string;
+  reason: string;
+  status: 'Pending' | 'Approved' | 'Rejected';
+  approvedBy?: string;
+  createdAt: string;
 }
 
 export interface UserSession {

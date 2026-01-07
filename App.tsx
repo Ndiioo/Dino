@@ -6,11 +6,12 @@ import {
   CloudUpload, CloudCheck, Camera, UserPlus, Edit3, QrCode, Loader2,
   Trash2, RotateCcw, UserX, FileText, Calendar, CheckSquare, Printer, Download,
   UserCheck, ShieldAlert, ShieldCheck, EyeClosed, UploadCloud, Info, TableProperties,
-  Database
+  Database, Trash, History, TrendingUp, TrendingDown, ChevronRight
 } from 'lucide-react';
 import { 
   Assignment, Station, GroupedAssignment, User, UserSession, 
-  LeaveRequest, DeactivationRequest, ReactivationRequest, AssignmentActionRequest
+  LeaveRequest, DeactivationRequest, ReactivationRequest, AssignmentActionRequest,
+  PositionChangeRequest
 } from './types';
 import { STATIONS } from './data';
 import { getLogisticsInsights } from './geminiService';
@@ -30,6 +31,7 @@ const LEAVE_KEY = 'spx_leave_requests';
 const DEACTIVATE_KEY = 'spx_deactivate_requests';
 const REACTIVATE_KEY = 'spx_reactivate_requests';
 const AT_ACTION_KEY = 'spx_at_action_requests';
+const POSITION_REQ_KEY = 'spx_position_requests';
 
 const extractIdAndName = (fullName: string) => {
   if (!fullName) return { id: '', name: 'N/A' };
@@ -93,12 +95,17 @@ const App: React.FC = () => {
   const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>([]);
   const [deactivateRequests, setDeactivateRequests] = useState<DeactivationRequest[]>([]);
   const [reactivateRequests, setReactivateRequests] = useState<ReactivationRequest[]>([]);
+  const [positionChangeRequests, setPositionChangeRequests] = useState<PositionChangeRequest[]>([]);
   
   const [showLeaveForm, setShowLeaveForm] = useState(false);
   const [leaveData, setLeaveData] = useState({ type: 'Tahunan', duration: '', reason: '', photoUrl: '' });
   
   const [showDeactivateModal, setShowDeactivateModal] = useState<{ userId: string, name: string } | null>(null);
   const [deactivateReason, setDeactivateReason] = useState("");
+
+  const [showPositionModal, setShowPositionModal] = useState<{ user: User, type: 'Promotion' | 'Demotion' } | null>(null);
+  const [posNewValue, setPosNewValue] = useState("");
+  const [posReason, setPosReason] = useState("");
 
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [editUserTarget, setEditUserTarget] = useState<User | null>(null);
@@ -109,34 +116,37 @@ const App: React.FC = () => {
   const [editPosition, setEditPosition] = useState("");
   const [editFullName, setEditFullName] = useState("");
   const photoRef = useRef<HTMLInputElement>(null);
-  const leavePhotoRef = useRef<HTMLInputElement>(null);
   const importRef = useRef<HTMLInputElement>(null);
-
-  // --- Sync Edit Fields ---
-  useEffect(() => {
-    if (showSettings && settingsTab === 'profile' && !editUserTarget && session) {
-      setEditFullName(session.user.name);
-      setEditNickname(session.user.nickname || "");
-      setEditWA(session.user.whatsapp || "");
-      setEditPhoto(session.user.photoUrl || "");
-      setEditDOB(session.user.dateOfBirth || "");
-      setEditPosition(session.user.position || "");
-    }
-  }, [showSettings, settingsTab, editUserTarget, session]);
 
   // --- Roles & Permissions ---
   const userRole = session?.user.role || "courier";
-  const userPos = session?.user.position.toUpperCase() || "";
+  const userPos = (session?.user.position || "").toUpperCase();
+  
   const isShiftLead = userPos.includes('SHIFT LEAD');
   const isHubLeadOrPIC = userPos.includes('HUB LEAD') || userPos.includes('PIC HUB');
   const isAdmin = userRole === 'admin';
   const isAdminTracer = userPos.includes('ADMIN TRACER');
   
-  const canManageUsers = isHubLeadOrPIC || isAdmin;
-  const canManageRoles = isHubLeadOrPIC || isAdmin;
-  const canDeleteAT = isShiftLead || isHubLeadOrPIC || isAdmin || isAdminTracer;
   const isAuthorized = isShiftLead || isHubLeadOrPIC || isAdmin;
-  const canSeeDirectory = userRole !== 'courier';
+  const canSeeDirectory = isAuthorized; 
+  const canManageUsers = isAuthorized; 
+  const canManageRoles = isAdmin || isHubLeadOrPIC; 
+  const canDeleteAT = isAuthorized || isAdminTracer;
+
+  const downloadTemplate = () => {
+    const headers = ['Nama Kurir', 'Jumlah Paket', 'Task ID', 'Status', 'Update Terakhir'];
+    const exampleData = ['Andi Pratama', '45', 'TASK-HUB-001', 'Pending', '08:00'];
+    const csvContent = [headers.join(','), exampleData.join(',')].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", "spx_import_template.csv");
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   // --- Effects ---
   useEffect(() => {
@@ -164,11 +174,13 @@ const App: React.FC = () => {
     const savedDeactivate = localStorage.getItem(DEACTIVATE_KEY);
     const savedReactivate = localStorage.getItem(REACTIVATE_KEY);
     const savedAtActions = localStorage.getItem(AT_ACTION_KEY);
+    const savedPosReqs = localStorage.getItem(POSITION_REQ_KEY);
     
     if (savedLeave) setLeaveRequests(JSON.parse(savedLeave));
     if (savedDeactivate) setDeactivateRequests(JSON.parse(savedDeactivate));
     if (savedReactivate) setReactivateRequests(JSON.parse(savedReactivate));
     if (savedAtActions) setAtActionRequests(JSON.parse(savedAtActions));
+    if (savedPosReqs) setPositionChangeRequests(JSON.parse(savedPosReqs));
 
     initializeAppData();
 
@@ -186,7 +198,8 @@ const App: React.FC = () => {
     localStorage.setItem(DEACTIVATE_KEY, JSON.stringify(deactivateRequests));
     localStorage.setItem(REACTIVATE_KEY, JSON.stringify(reactivateRequests));
     localStorage.setItem(AT_ACTION_KEY, JSON.stringify(atActionRequests));
-  }, [leaveRequests, deactivateRequests, reactivateRequests, atActionRequests]);
+    localStorage.setItem(POSITION_REQ_KEY, JSON.stringify(positionChangeRequests));
+  }, [leaveRequests, deactivateRequests, reactivateRequests, atActionRequests, positionChangeRequests]);
 
   const initializeAppData = async () => {
     setLoading(true);
@@ -234,7 +247,7 @@ const App: React.FC = () => {
     setIsLoggingIn(true);
     try {
       const user = allUsers.find(u => u.id === username.trim());
-      if (user && (password.trim() === user.password)) {
+      if (user && (password.trim() === (user.password || ""))) {
         if (user.status === 'Inactive') {
           alert("Akun Anda dinonaktifkan. Silakan hubungi Hub Lead.");
           return;
@@ -290,6 +303,50 @@ const App: React.FC = () => {
     } catch { alert("Gagal update."); } finally { setIsSaving(false); }
   };
 
+  const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    Papa.parse(file, {
+      header: true,
+      skipEmptyLines: true,
+      complete: (results) => {
+        const imported: Assignment[] = results.data.map((row: any, i) => ({
+          id: `imp-${Date.now()}-${i}`,
+          courierName: row['Nama Kurir'] || 'Imported User',
+          packageCount: parseInt(row['Jumlah Paket']) || 0,
+          station: selectedStation === 'All' ? 'Tompobulu' : selectedStation,
+          taskId: row['Task ID'] || `TASK-IMP-${i}`,
+          status: (row['Status'] || 'Pending') as any,
+          lastUpdated: row['Update Terakhir'] || new Date().toLocaleTimeString()
+        }));
+        setImportPreview(imported);
+        e.target.value = '';
+      }
+    });
+  };
+
+  const confirmUpload = async () => {
+    if (!importPreview) return;
+    setIsUploading(true);
+    try {
+      const stationToUpload = selectedStation === 'All' ? 'Tompobulu' : selectedStation;
+      const success = await uploadImportedData(stationToUpload, importPreview);
+      if (success) {
+        setAssignments(prev => [...importPreview, ...prev]);
+        setImportPreview(null);
+        alert("Data berhasil diunggah ke database spreadsheet secara permanen!");
+        fetchData(); 
+      } else {
+        alert("Gagal mengunggah data ke server.");
+      }
+    } catch {
+      alert("Terjadi kesalahan sistem saat mengunggah.");
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  // --- AT Action Management ---
   const requestAtAction = () => {
     if (!showAtActionModal || !session || !atActionReason) return;
     const targetAssignments = assignments.filter(a => showAtActionModal.ids.includes(a.id));
@@ -308,7 +365,7 @@ const App: React.FC = () => {
     setShowAtActionModal(null);
     setAtActionReason("");
     setSelectedAtIds([]);
-    alert(`Pengajuan ${showAtActionModal.type === 'Delete' ? 'penghapusan' : 'pemulihan'} dikirim untuk approval Hub Lead.`);
+    alert(`Pengajuan ${showAtActionModal.type === 'Delete' ? 'penghapusan' : 'pemulihan'} dikirim.`);
   };
 
   const approveAtAction = (req: AssignmentActionRequest) => {
@@ -318,15 +375,16 @@ const App: React.FC = () => {
         return { 
           ...a, 
           status: req.type === 'Delete' ? 'Deleted' : 'Pending',
-          deletionReason: req.type === 'Delete' ? req.reason : undefined
+          deletionReason: req.type === 'Delete' ? req.reason : undefined,
+          deletedAt: req.type === 'Delete' ? new Date().toLocaleString() : undefined
         };
       }
       return a;
     }));
     setAtActionRequests(prev => prev.map(r => r.id === req.id ? { ...r, status: 'Approved', approvedBy: session.user.name } : r));
-    alert(`${req.type === 'Delete' ? 'Penghapusan' : 'Pemulihan'} disetujui.`);
   };
 
+  // --- Member Action Management ---
   const requestDeactivation = () => {
     if (!showDeactivateModal || !session || !deactivateReason) return;
     const newReq: DeactivationRequest = {
@@ -336,12 +394,13 @@ const App: React.FC = () => {
       requesterId: session.user.id,
       requesterName: session.user.name,
       reason: deactivateReason,
-      status: 'Pending'
+      status: 'Pending',
+      createdAt: new Date().toLocaleString()
     };
     setDeactivateRequests([newReq, ...deactivateRequests]);
     setShowDeactivateModal(null);
     setDeactivateReason("");
-    alert("Pengajuan penonaktifan dikirim.");
+    alert("Permintaan deaktivasi dikirim.");
   };
 
   const approveDeactivation = (req: DeactivationRequest) => {
@@ -351,16 +410,20 @@ const App: React.FC = () => {
 
   const requestReactivation = (userId: string, name: string) => {
     if (!session) return;
+    const reason = prompt("Masukkan alasan re-aktivasi (Wajib):");
+    if (!reason) return;
     const newReq: ReactivationRequest = {
       id: Math.random().toString(36).substr(2, 9),
       targetUserId: userId,
       targetUserName: name,
       requesterId: session.user.id,
       requesterName: session.user.name,
-      status: 'Pending'
+      reason: reason,
+      status: 'Pending',
+      createdAt: new Date().toLocaleString()
     };
     setReactivateRequests([newReq, ...reactivateRequests]);
-    alert("Pengajuan re-aktivasi dikirim.");
+    alert("Permintaan re-aktivasi dikirim.");
   };
 
   const approveReactivation = (req: ReactivationRequest) => {
@@ -368,64 +431,32 @@ const App: React.FC = () => {
     setReactivateRequests(prev => prev.map(r => r.id === req.id ? { ...r, status: 'Approved', approvedBy: session?.user.name } : r));
   };
 
-  const downloadTemplate = () => {
-    // Hub specific name implementation
-    const hubName = selectedStation === 'All' ? 'HUB_GENERAL' : selectedStation;
-    const templateData = [
-      ["Nama Kurir", "Jumlah Paket", "Status", "Task ID", "Update Terakhir"],
-      [`[FMS123] Contoh Nama ${hubName}`, "45", "Pending", `SPX-${hubName.slice(0,3).toUpperCase()}-001`, "08:00"]
-    ];
-    const csvContent = "data:text/csv;charset=utf-8," + templateData.map(e => e.join(",")).join("\n");
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `SPX_Template_Assignment_${hubName}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+  // --- Position Change Management ---
+  const requestPositionChange = () => {
+    if (!showPositionModal || !posNewValue || !posReason || !session) return;
+    const newReq: PositionChangeRequest = {
+      id: Math.random().toString(36).substr(2, 9),
+      targetUserId: showPositionModal.user.id,
+      targetUserName: showPositionModal.user.name,
+      oldPosition: showPositionModal.user.position,
+      newPosition: posNewValue,
+      type: showPositionModal.type,
+      requesterId: session.user.id,
+      requesterName: session.user.name,
+      reason: posReason,
+      status: 'Pending',
+      createdAt: new Date().toLocaleString()
+    };
+    setPositionChangeRequests([newReq, ...positionChangeRequests]);
+    setShowPositionModal(null);
+    setPosNewValue("");
+    setPosReason("");
+    alert(`Permintaan ${showPositionModal.type === 'Promotion' ? 'Promosi' : 'Demosi'} dikirim.`);
   };
 
-  const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    Papa.parse(file, {
-      header: true,
-      skipEmptyLines: true,
-      complete: (results) => {
-        const imported: Assignment[] = results.data.map((row: any, i) => ({
-          id: `imp-${Date.now()}-${i}`,
-          courierName: row['Nama Kurir'] || 'Imported User',
-          packageCount: parseInt(row['Jumlah Paket']) || 0,
-          station: selectedStation === 'All' ? 'Tompobulu' : selectedStation,
-          taskId: row['Task ID'] || `TASK-IMP-${i}`,
-          status: (row['Status'] || 'Pending') as any,
-          lastUpdated: row['Update Terakhir'] || new Date().toLocaleTimeString()
-        }));
-        setImportPreview(imported);
-        // Reset input so the same file can be uploaded again if needed
-        e.target.value = '';
-      }
-    });
-  };
-
-  const confirmUpload = async () => {
-    if (!importPreview) return;
-    setIsUploading(true);
-    try {
-      const stationToUpload = selectedStation === 'All' ? 'Tompobulu' : selectedStation;
-      const success = await uploadImportedData(stationToUpload, importPreview);
-      if (success) {
-        setAssignments([...importPreview, ...assignments]);
-        setImportPreview(null);
-        alert("Data berhasil diunggah ke database spreadsheet!");
-      } else {
-        alert("Gagal mengunggah data ke server.");
-      }
-    } catch {
-      alert("Terjadi kesalahan sistem saat mengunggah.");
-    } finally {
-      setIsUploading(false);
-    }
+  const approvePositionChange = (req: PositionChangeRequest) => {
+    setAllUsers(prev => prev.map(u => u.id === req.targetUserId ? { ...u, position: req.newPosition } : u));
+    setPositionChangeRequests(prev => prev.map(r => r.id === req.id ? { ...r, status: 'Approved', approvedBy: session?.user.name } : r));
   };
 
   const handleCopyAT = (id: string) => {
@@ -504,6 +535,14 @@ const App: React.FC = () => {
     };
   }, [assignments, allUsers]);
 
+  const pendingApprovalsCount = useMemo(() => {
+    return leaveRequests.filter(r => r.status === 'Pending').length + 
+           deactivateRequests.filter(r => r.status === 'Pending').length + 
+           reactivateRequests.filter(r => r.status === 'Pending').length + 
+           atActionRequests.filter(r => r.status === 'Pending').length +
+           positionChangeRequests.filter(r => r.status === 'Pending').length;
+  }, [leaveRequests, deactivateRequests, reactivateRequests, atActionRequests, positionChangeRequests]);
+
   if (loading) return (
     <div className="min-h-screen bg-white flex flex-col items-center justify-center p-4">
       <Loader2 className="w-10 h-10 text-[#EE4D2D] animate-spin" />
@@ -550,7 +589,7 @@ const App: React.FC = () => {
            <div className="p-12 rounded-[50px] bg-white/5 border border-white/10 shadow-2xl animate-pulse">
               <EyeClosed size={80} className="text-[#EE4D2D] mb-8 mx-auto" />
               <h2 className="text-white text-2xl font-black uppercase italic tracking-tighter">Security Shield Active</h2>
-              <p className="text-gray-400 text-sm mt-4 uppercase font-bold tracking-[0.2em] max-w-xs">Capture data operasional dilarang. Hubungi Hub Lead untuk akses fisik.</p>
+              <p className="text-gray-400 text-sm mt-4 uppercase font-bold tracking-[0.2em] max-w-xs">Operasional Hub Tertutup.</p>
            </div>
         </div>
       )}
@@ -574,6 +613,7 @@ const App: React.FC = () => {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 mt-8 space-y-6">
+        {/* Stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {[
             { label: 'Total Paket', val: stats.pkg, icon: Package, col: 'text-orange-600' },
@@ -591,26 +631,27 @@ const App: React.FC = () => {
           ))}
         </div>
 
+        {/* Action Bar */}
         <div className="flex flex-wrap items-center justify-between gap-4 bg-white p-4 rounded-[32px] border border-gray-100 shadow-sm">
           <div className="flex gap-2">
             <button onClick={() => { setShowSettings(true); setSettingsTab('leave'); }} className="flex items-center gap-2 px-4 py-3 rounded-2xl bg-orange-50 text-[#EE4D2D] font-black text-[10px] uppercase border border-orange-100">
               <Calendar size={16} /> Cuti
             </button>
-            {(isShiftLead || isHubLeadOrPIC) && (
+            {(isAuthorized) && (
               <button onClick={() => { setShowSettings(true); setSettingsTab('approvals'); }} className="flex items-center gap-2 px-4 py-3 rounded-2xl bg-[#EE4D2D] text-white font-black text-[10px] uppercase shadow-md relative">
-                <CheckSquare size={16} /> Approval
-                {(leaveRequests.filter(r => r.status === 'Pending').length > 0) && <span className="absolute -top-1 -right-1 w-4 h-4 bg-black text-white text-[8px] rounded-full border border-white flex items-center justify-center">!</span>}
+                <CheckSquare size={16} /> Approval Hub
+                {pendingApprovalsCount > 0 && <span className="absolute -top-1 -right-1 w-5 h-5 bg-black text-white text-[9px] rounded-full border-2 border-white flex items-center justify-center font-black animate-pulse">{pendingApprovalsCount}</span>}
               </button>
             )}
             {isAuthorized && (
                <button onClick={() => { setShowSettings(true); setSettingsTab('history'); }} className="flex items-center gap-2 px-4 py-3 rounded-2xl bg-slate-900 text-white font-black text-[10px] uppercase">
-                 <Trash2 size={16} /> Deleted AT
+                 <History size={16} /> Log Archive
                </button>
             )}
           </div>
           
           <div className="flex gap-2">
-            {canManageUsers && (
+            {isAuthorized && (
               <div className="flex gap-2">
                 <button onClick={() => importRef.current?.click()} className="flex items-center gap-2 px-4 py-3 rounded-2xl bg-indigo-50 text-indigo-700 font-black text-[10px] uppercase border border-indigo-100">
                   <UploadCloud size={16} /> Import AT
@@ -621,15 +662,15 @@ const App: React.FC = () => {
                 </button>
               </div>
             )}
-            {isAuthorized && (
+            {canSeeDirectory && (
               <button onClick={() => { setShowSettings(true); setSettingsTab('directory'); }} className="flex items-center gap-2 px-4 py-3 rounded-2xl bg-black text-white font-black text-[10px] uppercase">
-                <UserPlus size={16} /> Kelola Tim
+                <UserPlus size={16} /> Team Directory
               </button>
             )}
           </div>
         </div>
 
-        {/* Search and Filters */}
+        {/* Search */}
         <div className="flex flex-col md:flex-row gap-3">
           <div className="relative flex-1 group">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
@@ -646,7 +687,7 @@ const App: React.FC = () => {
         {/* Task Grid */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 pb-20">
           {groupedCouriers.map((group) => (
-            <div key={group.id} className={`bg-white p-4 rounded-[32px] border border-gray-100 shadow-sm hover:shadow-xl transition-all flex flex-col group animate-fade-in relative ${selectedAtIds.some(id => group.tasks.map(t => t.id).includes(id)) ? 'ring-2 ring-[#EE4D2D]' : ''}`}>
+            <div key={group.id} className={`bg-white p-4 rounded-[32px] border border-gray-100 shadow-sm hover:shadow-xl transition-all flex flex-col group animate-fade-in relative`}>
                <div className="flex justify-between items-start mb-4">
                  <div className="bg-gray-100 text-gray-900 px-2 py-1 rounded-lg text-[7px] font-black uppercase tracking-widest">{group.station}</div>
                  <div className={`w-2 h-2 rounded-full ${group.status === 'Completed' ? 'bg-emerald-500' : 'bg-orange-500'}`}></div>
@@ -668,60 +709,6 @@ const App: React.FC = () => {
         </div>
       </main>
 
-      {/* Import Preview Modal */}
-      {importPreview && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/90 backdrop-blur-xl animate-fade-in">
-          <div className="bg-white rounded-[40px] w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden shadow-2xl">
-            <div className="bg-indigo-600 p-6 text-white flex justify-between items-center shrink-0">
-               <div className="flex items-center gap-3">
-                  <TableProperties size={28} />
-                  <div>
-                    <h2 className="text-xl font-black uppercase italic tracking-tighter">Pratinjau Impor Data</h2>
-                    <p className="text-[10px] font-bold uppercase opacity-70 tracking-widest">Hub: {selectedStation === 'All' ? 'Tompobulu (Default)' : selectedStation}</p>
-                  </div>
-               </div>
-               <button onClick={() => setImportPreview(null)} className="p-3 bg-white/20 rounded-2xl hover:bg-white/40"><XCircle size={28} /></button>
-            </div>
-            
-            <div className="flex-1 overflow-auto p-6 bg-gray-50">
-               <div className="bg-white rounded-[32px] border border-gray-100 shadow-sm overflow-hidden">
-                  <table className="w-full text-left border-collapse">
-                    <thead className="bg-gray-50 border-b border-gray-100">
-                      <tr>
-                        <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Nama Kurir</th>
-                        <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Task ID</th>
-                        <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Paket</th>
-                        <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-50">
-                      {importPreview.map((item, idx) => (
-                        <tr key={idx} className="hover:bg-gray-50/50">
-                          <td className="px-6 py-4 font-bold text-gray-900 text-sm">{item.courierName}</td>
-                          <td className="px-6 py-4 font-mono text-xs text-indigo-600">{item.taskId}</td>
-                          <td className="px-6 py-4 font-black text-gray-900">{item.packageCount}</td>
-                          <td className="px-6 py-4">
-                             <span className="text-[8px] font-black uppercase px-2 py-1 rounded-lg bg-orange-50 text-orange-600 border border-orange-100">
-                               {item.status}
-                             </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-               </div>
-            </div>
-
-            <div className="p-8 bg-white border-t border-gray-100 flex gap-4 shrink-0">
-               <button onClick={() => setImportPreview(null)} className="flex-1 py-5 bg-gray-100 text-gray-500 rounded-[28px] font-black text-xs uppercase tracking-widest hover:bg-gray-200 transition-all">BATAL</button>
-               <button onClick={confirmUpload} disabled={isUploading} className="flex-2 py-5 bg-indigo-600 text-white rounded-[28px] font-black text-xs uppercase tracking-widest shadow-xl flex items-center justify-center gap-3 active:scale-95 transition-all">
-                 {isUploading ? <Loader2 className="animate-spin" size={24} /> : <Database size={24} />} KONFIRMASI & UPLOAD KE DATABASE
-               </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Verification Modal */}
       {selectedGroup && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/90 backdrop-blur-xl animate-fade-in">
@@ -741,11 +728,6 @@ const App: React.FC = () => {
                       <p className="text-[9px] font-black text-gray-400 uppercase mb-1">Token Penugasan</p>
                       <h4 className="text-lg font-black text-gray-900 font-mono tracking-tighter">{t.taskId}</h4>
                     </div>
-                    <div className="flex gap-2">
-                       <button onClick={() => handleCopyAT(t.taskId)} className={`p-3 rounded-xl border transition-all ${copiedId === t.taskId ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-gray-400 border-gray-100'}`}>
-                         {copiedId === t.taskId ? <Check size={20} /> : <Copy size={20} />}
-                       </button>
-                    </div>
                   </div>
                   <div className="p-8 border-[12px] border-black rounded-[48px] bg-white shadow-2xl">
                     <QRCodeSVG value={t.taskId} size={240} level="H" includeMargin={true} />
@@ -760,14 +742,14 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {/* Settings Panel */}
+      {/* Settings & Admin Panel */}
       {showSettings && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/98 backdrop-blur-2xl animate-fade-in">
-          <div className="bg-white rounded-[44px] w-full max-w-3xl max-h-[92vh] flex flex-col overflow-hidden shadow-2xl">
+          <div className="bg-white rounded-[44px] w-full max-w-6xl max-h-[92vh] flex flex-col overflow-hidden shadow-2xl">
             <div className="bg-black p-8 text-white flex justify-between items-center shrink-0">
               <div className="flex items-center gap-4">
-                <Settings size={28} className="text-[#EE4D2D]" />
-                <h2 className="text-xl font-black uppercase italic">Dashboard Hub</h2>
+                <ShieldCheck size={28} className="text-[#EE4D2D]" />
+                <h2 className="text-xl font-black uppercase italic">Hub Management Dashboard</h2>
               </div>
               <button onClick={() => setShowSettings(false)} className="p-3 bg-white/10 rounded-xl hover:bg-white/20"><XCircle size={32} /></button>
             </div>
@@ -775,11 +757,16 @@ const App: React.FC = () => {
             <nav className="flex border-b border-gray-100 bg-white sticky top-0 z-20 overflow-x-auto no-scrollbar shrink-0">
               <button onClick={() => { setEditUserTarget(null); setSettingsTab('profile'); }} className={`px-8 py-5 font-black text-[11px] uppercase tracking-widest transition-all shrink-0 ${settingsTab === 'profile' ? 'text-[#EE4D2D] border-b-4 border-[#EE4D2D]' : 'text-gray-400'}`}>Profil</button>
               {canSeeDirectory && (
-                <button onClick={() => setSettingsTab('directory')} className={`px-8 py-5 font-black text-[11px] uppercase tracking-widest transition-all shrink-0 ${settingsTab === 'directory' ? 'text-[#EE4D2D] border-b-4 border-[#EE4D2D]' : 'text-gray-400'}`}>Direktori</button>
+                <button onClick={() => setSettingsTab('directory')} className={`px-8 py-5 font-black text-[11px] uppercase tracking-widest transition-all shrink-0 ${settingsTab === 'directory' ? 'text-[#EE4D2D] border-b-4 border-[#EE4D2D]' : 'text-gray-400'}`}>Directory</button>
               )}
-              <button onClick={() => setSettingsTab('leave')} className={`px-8 py-5 font-black text-[11px] uppercase tracking-widest transition-all shrink-0 ${settingsTab === 'leave' ? 'text-[#EE4D2D] border-b-4 border-[#EE4D2D]' : 'text-gray-400'}`}>Cuti</button>
-              {(isShiftLead || isHubLeadOrPIC) && (
-                <button onClick={() => setSettingsTab('approvals')} className={`px-8 py-5 font-black text-[11px] uppercase tracking-widest transition-all shrink-0 ${settingsTab === 'approvals' ? 'text-[#EE4D2D] border-b-4 border-[#EE4D2D]' : 'text-gray-400'}`}>Approval</button>
+              {isAuthorized && (
+                <button onClick={() => setSettingsTab('approvals')} className={`px-8 py-5 font-black text-[11px] uppercase tracking-widest transition-all shrink-0 ${settingsTab === 'approvals' ? 'text-[#EE4D2D] border-b-4 border-[#EE4D2D]' : 'text-gray-400'} flex items-center gap-2`}>
+                  Approvals
+                  {pendingApprovalsCount > 0 && <span className="bg-[#EE4D2D] text-white px-2 py-0.5 rounded-md text-[8px] font-black">{pendingApprovalsCount}</span>}
+                </button>
+              )}
+              {isAuthorized && (
+                <button onClick={() => setSettingsTab('history')} className={`px-8 py-5 font-black text-[11px] uppercase tracking-widest transition-all shrink-0 ${settingsTab === 'history' ? 'text-[#EE4D2D] border-b-4 border-[#EE4D2D]' : 'text-gray-400'}`}>Trash</button>
               )}
             </nav>
 
@@ -804,22 +791,9 @@ const App: React.FC = () => {
                   </div>
                   <div className="space-y-4">
                     <div className="bg-white p-5 rounded-[32px] border border-gray-200 shadow-sm">
-                      <p className="text-[10px] font-black text-gray-400 uppercase mb-1">Nama Lengkap (FMS)</p>
+                      <p className="text-[10px] font-black text-gray-400 uppercase mb-1">Nama Lengkap</p>
                       <input type="text" value={editFullName} onChange={e => setEditFullName(e.target.value)} className="w-full font-black text-black outline-none text-base bg-transparent" />
                     </div>
-                    <div className="bg-white p-5 rounded-[32px] border border-gray-200 shadow-sm">
-                      <p className="text-[10px] font-black text-gray-400 uppercase mb-1 flex items-center justify-between">
-                        Tanggal Lahir 
-                        {((editUserTarget ? editUserTarget.id : session.user.id) !== session.user.id) && <span className="text-red-500 text-[8px] bg-red-50 px-1 rounded">PRIVASI MEMBER</span>}
-                      </p>
-                      <input type="date" value={editDOB} onChange={e => setEditDOB(e.target.value)} disabled={(editUserTarget ? editUserTarget.id : session.user.id) !== session.user.id} className="w-full font-black text-black outline-none text-sm bg-transparent disabled:opacity-30" />
-                    </div>
-                    {canManageRoles && (
-                      <div className="bg-indigo-50 p-5 rounded-[32px] border border-indigo-100 shadow-sm">
-                        <p className="text-[10px] font-black text-indigo-600 uppercase mb-1">Position / Role Management</p>
-                        <input type="text" value={editPosition} onChange={e => setEditPosition(e.target.value)} className="w-full font-black text-indigo-900 outline-none text-sm bg-transparent" placeholder="Admin Tracer, Hub Lead, dll..." />
-                      </div>
-                    )}
                     <div className="grid grid-cols-2 gap-4">
                       <div className="bg-white p-5 rounded-[32px] border border-gray-200 shadow-sm">
                         <p className="text-[10px] font-black text-gray-400 uppercase mb-1">Nickname</p>
@@ -836,17 +810,280 @@ const App: React.FC = () => {
                   </button>
                 </div>
               )}
+
+              {settingsTab === 'directory' && (
+                <div className="space-y-8 animate-fade-in">
+                  <div className="flex flex-col md:flex-row gap-4 mb-2">
+                    <div className="relative flex-1">
+                       <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                       <input type="text" placeholder="Search team members..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="w-full pl-12 pr-6 py-4 rounded-2xl bg-white border border-gray-200 outline-none text-sm font-bold" />
+                    </div>
+                  </div>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                    {filteredUsers.map(user => {
+                      const pos = (user.position || "").toUpperCase();
+                      const isTargetHubLead = pos.includes('HUB LEAD') || pos.includes('PIC HUB');
+                      const isTargetShiftLead = pos.includes('SHIFT LEAD');
+                      
+                      return (
+                        <div key={user.id} className={`bg-white p-6 rounded-[32px] border shadow-sm flex flex-col gap-5 group hover:shadow-lg transition-all ${user.status === 'Inactive' ? 'opacity-50 grayscale' : 'border-gray-50'}`}>
+                          <div className="flex items-center gap-4">
+                             <div className={`w-14 h-14 rounded-2xl ${getAvatarColor(user.name)} flex items-center justify-center text-white font-black overflow-hidden shadow-inner`}>
+                               {user.photoUrl ? <img src={user.photoUrl} className="w-full h-full object-cover" /> : getInitials(user.name)}
+                             </div>
+                             <div className="flex-1 min-w-0">
+                               <h4 className="font-black text-gray-900 text-sm uppercase truncate">{user.nickname || user.name}</h4>
+                               <div className="flex flex-wrap gap-1 mt-1">
+                                 <span className={`text-[7px] px-1.5 py-0.5 rounded-md font-black uppercase ${isTargetHubLead ? 'bg-amber-100 text-amber-700' : isTargetShiftLead ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-600'}`}>
+                                   {user.position || user.role}
+                                 </span>
+                                 {user.status === 'Inactive' && <span className="bg-red-100 text-red-700 text-[7px] px-1.5 py-0.5 rounded-md font-black uppercase">NONAKTIF</span>}
+                               </div>
+                             </div>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-2 mt-auto">
+                            {canManageUsers && (
+                              <button onClick={() => handleOpenEditUser(user)} className="py-2.5 bg-gray-50 text-gray-400 rounded-xl font-black text-[8px] uppercase hover:bg-orange-50 hover:text-[#EE4D2D] transition-all flex items-center justify-center gap-1.5">
+                                <Edit3 size={12} /> Profil
+                              </button>
+                            )}
+                            {isShiftLead && user.status !== 'Inactive' && (
+                              <>
+                                <button onClick={() => setShowPositionModal({ user, type: 'Promotion' })} className="py-2.5 bg-indigo-50 text-indigo-600 rounded-xl font-black text-[8px] uppercase hover:bg-indigo-100 transition-all flex items-center justify-center gap-1.5">
+                                  <TrendingUp size={12} /> Promosi
+                                </button>
+                                <button onClick={() => setShowPositionModal({ user, type: 'Demotion' })} className="py-2.5 bg-amber-50 text-amber-600 rounded-xl font-black text-[8px] uppercase hover:bg-amber-100 transition-all flex items-center justify-center gap-1.5">
+                                  <TrendingDown size={12} /> Demosi
+                                </button>
+                                <button onClick={() => setShowDeactivateModal({ userId: user.id, name: user.name })} className="py-2.5 bg-red-50 text-red-600 rounded-xl font-black text-[8px] uppercase hover:bg-red-100 transition-all flex items-center justify-center gap-1.5">
+                                  <UserX size={12} /> Nonaktif
+                                </button>
+                              </>
+                            )}
+                            {isShiftLead && user.status === 'Inactive' && (
+                              <button onClick={() => requestReactivation(user.id, user.name)} className="col-span-2 py-2.5 bg-emerald-50 text-emerald-600 rounded-xl font-black text-[8px] uppercase hover:bg-emerald-100 transition-all flex items-center justify-center gap-1.5">
+                                <RotateCcw size={12} /> Re-aktivasi
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {settingsTab === 'approvals' && (
+                <div className="space-y-12 animate-fade-in">
+                  {/* Position Change Approvals */}
+                  {positionChangeRequests.filter(r => r.status === 'Pending').length > 0 && (
+                    <div className="space-y-4">
+                      <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2"><TrendingUp size={14} /> Promotion & Demotion Approval</p>
+                      <div className="grid gap-3">
+                        {positionChangeRequests.filter(r => r.status === 'Pending').map(req => (
+                          <div key={req.id} className="bg-white p-6 rounded-[32px] border border-gray-100 shadow-sm flex items-center justify-between">
+                            <div className="flex items-center gap-5">
+                               <div className={`p-4 rounded-2xl ${req.type === 'Promotion' ? 'bg-indigo-50 text-indigo-600' : 'bg-amber-50 text-amber-600'}`}>
+                                 {req.type === 'Promotion' ? <TrendingUp size={24} /> : <TrendingDown size={24} />}
+                               </div>
+                               <div>
+                                 <p className="text-[10px] font-black text-gray-400 uppercase">Target: {req.targetUserName}</p>
+                                 <h4 className="font-black text-gray-900 text-sm uppercase italic flex items-center gap-2">
+                                   {req.oldPosition} <ChevronRight size={14} className="text-gray-300" /> <span className="text-[#EE4D2D]">{req.newPosition}</span>
+                                 </h4>
+                                 <p className="text-[9px] font-bold text-gray-400 mt-1 italic">Reason: "{req.reason}"</p>
+                                 <p className="text-[8px] font-bold text-[#EE4D2D] mt-1 uppercase">Req by: {req.requesterName} • {req.createdAt}</p>
+                               </div>
+                            </div>
+                            <button onClick={() => approvePositionChange(req)} className="px-6 py-3 bg-black text-white rounded-xl font-black text-[10px] uppercase shadow-lg hover:bg-emerald-600 transition-all">Setujui</button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Member Status Approvals */}
+                  {(deactivateRequests.filter(r => r.status === 'Pending').length > 0 || reactivateRequests.filter(r => r.status === 'Pending').length > 0) && (
+                    <div className="space-y-4">
+                      <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2"><UserCheck size={14} /> Status Change Approval</p>
+                      <div className="grid gap-3">
+                        {deactivateRequests.filter(r => r.status === 'Pending').map(req => (
+                          <div key={req.id} className="bg-white p-6 rounded-[32px] border border-gray-100 shadow-sm flex items-center justify-between">
+                            <div className="flex items-center gap-5">
+                               <div className="p-4 rounded-2xl bg-red-50 text-red-600"><UserX size={24} /></div>
+                               <div>
+                                 <p className="text-[10px] font-black text-gray-400 uppercase">Nonaktifkan: {req.targetUserName}</p>
+                                 <p className="text-[9px] font-bold text-gray-400 mt-1 italic">Reason: "{req.reason}"</p>
+                                 <p className="text-[8px] font-bold text-[#EE4D2D] mt-1 uppercase">Req by: {req.requesterName}</p>
+                               </div>
+                            </div>
+                            <button onClick={() => approveDeactivation(req)} className="px-6 py-3 bg-black text-white rounded-xl font-black text-[10px] uppercase shadow-lg hover:bg-red-600 transition-all">Approve</button>
+                          </div>
+                        ))}
+                        {reactivateRequests.filter(r => r.status === 'Pending').map(req => (
+                          <div key={req.id} className="bg-white p-6 rounded-[32px] border border-gray-100 shadow-sm flex items-center justify-between">
+                            <div className="flex items-center gap-5">
+                               <div className="p-4 rounded-2xl bg-emerald-50 text-emerald-600"><RotateCcw size={24} /></div>
+                               <div>
+                                 <p className="text-[10px] font-black text-gray-400 uppercase">Aktifkan: {req.targetUserName}</p>
+                                 <p className="text-[9px] font-bold text-gray-400 mt-1 italic">Reason: "{req.reason}"</p>
+                                 <p className="text-[8px] font-bold text-[#EE4D2D] mt-1 uppercase">Req by: {req.requesterName}</p>
+                               </div>
+                            </div>
+                            <button onClick={() => approveReactivation(req)} className="px-6 py-3 bg-black text-white rounded-xl font-black text-[10px] uppercase shadow-lg hover:bg-emerald-600 transition-all">Approve</button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {pendingApprovalsCount === 0 && (
+                    <div className="flex flex-col items-center justify-center p-20 text-center opacity-20">
+                       <CheckCircle2 size={64} className="mb-4 text-emerald-500" />
+                       <h3 className="text-xl font-black uppercase italic tracking-tighter">Semua Terproses</h3>
+                       <p className="text-sm font-bold uppercase tracking-widest mt-2">Tidak ada permintaan menunggu persetujuan.</p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {settingsTab === 'history' && (
+                <div className="space-y-6 animate-fade-in">
+                  <div className="flex justify-between items-center bg-white p-6 rounded-[32px] border border-gray-100">
+                    <div>
+                      <h3 className="text-lg font-black text-gray-900 uppercase">Archive Management</h3>
+                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Penugasan & Member terhapus / histori perubahan.</p>
+                    </div>
+                    <History className="text-gray-300" size={32} />
+                  </div>
+
+                  <div className="grid gap-3">
+                    {assignments.filter(a => a.status === 'Deleted').map(a => (
+                      <div key={a.id} className="bg-white p-6 rounded-[32px] border border-gray-100 shadow-sm flex items-center justify-between group hover:border-[#EE4D2D] transition-all">
+                        <div className="flex items-center gap-4">
+                           <div className="w-12 h-12 rounded-2xl bg-red-50 flex items-center justify-center text-red-300"><Package size={24} /></div>
+                           <div>
+                             <h4 className="font-black text-gray-900 text-sm uppercase">{a.courierName} • {a.station}</h4>
+                             <p className="text-[10px] font-black text-red-400 italic">Reason: "{a.deletionReason || 'Administrative Cleanup'}"</p>
+                           </div>
+                        </div>
+                        {isShiftLead && (
+                           <button onClick={() => approveAtAction({ id: 'dummy', assignmentIds: [a.id], type: 'Restore', status: 'Approved', reason: 'Restoration', createdAt: '', requesterId: '', requesterName: '', taskIds: [] })} className="px-5 py-2.5 bg-black text-white rounded-xl font-black text-[9px] uppercase hover:bg-emerald-600 transition-all">Pulihkan</button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
-            <div className="p-8 bg-white border-t border-gray-100 flex justify-center shrink-0">
-               <button onClick={() => setShowSettings(false)} className="w-full max-w-sm py-5 bg-gray-100 text-gray-900 rounded-[28px] font-black text-xs uppercase tracking-widest hover:bg-gray-200 transition-all">TUTUP</button>
-            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Promotion / Demotion Modal */}
+      {showPositionModal && (
+        <div className="fixed inset-0 z-[400] flex items-center justify-center p-4 bg-black/95 backdrop-blur-2xl animate-fade-in">
+          <div className="bg-white rounded-[40px] w-full max-w-md p-10 shadow-2xl space-y-8">
+             <div className="flex justify-between items-center">
+                <div className="flex items-center gap-4">
+                   <div className={`p-4 rounded-2xl ${showPositionModal.type === 'Promotion' ? 'bg-indigo-50 text-indigo-600' : 'bg-amber-50 text-amber-600'}`}>
+                      {showPositionModal.type === 'Promotion' ? <TrendingUp size={32} /> : <TrendingDown size={32} />}
+                   </div>
+                   <div>
+                      <h2 className="text-xl font-black uppercase italic tracking-tighter">{showPositionModal.type === 'Promotion' ? 'Promosi' : 'Demosi'} Tim</h2>
+                      <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Network Authority Control</p>
+                   </div>
+                </div>
+                <button onClick={() => setShowPositionModal(null)} className="text-gray-300 hover:text-black transition-all"><XCircle size={32} /></button>
+             </div>
+
+             <div className="space-y-4">
+                <div className="bg-gray-50 p-6 rounded-[32px] border border-gray-100">
+                  <p className="text-[10px] font-black text-gray-400 uppercase mb-1">Target Anggota</p>
+                  <p className="font-black text-gray-900 text-lg uppercase">{showPositionModal.user.name}</p>
+                  <p className="text-[10px] font-bold text-gray-400 mt-1 uppercase italic">Posisi Saat Ini: {showPositionModal.user.position}</p>
+                </div>
+                
+                <div className="space-y-2">
+                  <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Jabatan Baru (Wajib)</p>
+                  <input 
+                    type="text"
+                    value={posNewValue}
+                    onChange={(e) => setPosNewValue(e.target.value)}
+                    className="w-full p-6 rounded-[28px] bg-gray-50 border border-gray-100 outline-none focus:border-[#EE4D2D] font-black text-sm uppercase"
+                    placeholder="Contoh: SHIFT LEAD 2"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Alasan (Wajib)</p>
+                  <textarea 
+                    value={posReason}
+                    onChange={(e) => setPosReason(e.target.value)}
+                    className="w-full p-6 rounded-[28px] bg-gray-50 border border-gray-100 outline-none focus:border-[#EE4D2D] transition-all font-bold text-sm h-32 resize-none"
+                    placeholder="Jelaskan alasan perubahan jabatan ini..."
+                  />
+                </div>
+             </div>
+
+             <button 
+               onClick={requestPositionChange}
+               disabled={!posNewValue || !posReason}
+               className={`w-full py-5 rounded-[28px] font-black text-xs uppercase tracking-[0.2em] shadow-xl transition-all ${(!posNewValue || !posReason) ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-black text-white active:scale-95'}`}
+             >
+               KIRIM PENGAJUAN
+             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Deactivation Modal */}
+      {showDeactivateModal && (
+        <div className="fixed inset-0 z-[400] flex items-center justify-center p-4 bg-black/95 backdrop-blur-2xl animate-fade-in">
+          <div className="bg-white rounded-[40px] w-full max-w-md p-10 shadow-2xl space-y-8">
+             <div className="flex justify-between items-center">
+                <div className="flex items-center gap-4">
+                   <div className="p-4 rounded-2xl bg-red-50 text-red-600"><UserX size={32} /></div>
+                   <div>
+                      <h2 className="text-xl font-black uppercase italic tracking-tighter">Deaktivasi Member</h2>
+                      <p className="text-[10px] font-black text-gray-400 uppercase">Security Authority System</p>
+                   </div>
+                </div>
+                <button onClick={() => setShowDeactivateModal(null)} className="text-gray-300 hover:text-black transition-all"><XCircle size={32} /></button>
+             </div>
+
+             <div className="space-y-4">
+                <div className="bg-gray-50 p-6 rounded-[32px] border border-gray-100">
+                  <p className="text-[10px] font-black text-gray-400 uppercase mb-1">Target Penonaktifan</p>
+                  <p className="font-black text-gray-900 text-lg uppercase">{showDeactivateModal.name}</p>
+                </div>
+                <div className="space-y-2">
+                  <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Alasan (Wajib)</p>
+                  <textarea 
+                    value={deactivateReason}
+                    onChange={(e) => setDeactivateReason(e.target.value)}
+                    className="w-full p-6 rounded-[28px] bg-gray-50 border border-gray-100 outline-none focus:border-red-500 transition-all font-bold text-sm h-32 resize-none"
+                    placeholder="Jelaskan alasan penonaktifan..."
+                  />
+                </div>
+             </div>
+
+             <button 
+               onClick={requestDeactivation}
+               disabled={!deactivateReason}
+               className={`w-full py-5 rounded-[28px] font-black text-xs uppercase tracking-[0.2em] shadow-xl transition-all ${!deactivateReason ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-red-600 text-white active:scale-95'}`}
+             >
+               KIRIM REQUEST
+             </button>
           </div>
         </div>
       )}
 
       <footer className="max-w-7xl mx-auto px-4 mt-16 pb-16 text-center opacity-30 select-none">
         <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.5em] mb-2">Shopee Xpress Hub Secure Management</p>
-        <p className="text-[8px] font-bold text-gray-300 uppercase tracking-widest leading-none">ENTERPRISE EDITION v4.3.0 • SECURE MODE ON</p>
+        <p className="text-[8px] font-bold text-gray-300 uppercase tracking-widest leading-none">ENTERPRISE EDITION v4.5.0 • SECURE MODE ON</p>
       </footer>
     </div>
   );
