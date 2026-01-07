@@ -1,0 +1,7 @@
+{
+  "name": "SPX Assignment Task Manager",
+  "description": "A logistics management dashboard for Shopee Xpress (SPX) assignments across Tompobulu, Biringbulu, and Bungaya regions, featuring real-time insights and QR-based task verification.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
